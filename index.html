@@ -278,6 +278,7 @@
 const CONFIG = {
   currency: "AED",
   whatsappNumber: "971569048608",
+  imgbbApiKey: "8079011f00e98054799929382858ebfe",
   products: [
     { id:"p1", en:"Dukhun flour, 1kg", ar:"دقيق الدخن، ١ كجم", price:22 },
     { id:"p2", en:"Roasted dukhun bites", ar:"حبات الدخن المحمّصة", price:15 },
@@ -457,15 +458,14 @@ function uploadStickerToHost(canvas){
   return new Promise((resolve, reject) => {
     canvas.toBlob(blob => {
       const form = new FormData();
-      form.append("reqtype", "fileupload");
-      form.append("fileToUpload", blob, "sticker.png");
-      fetch("https://catbox.moe/user/api.php", {
+      form.append("image", blob, "sticker.png");
+      fetch(`https://api.imgbb.com/1/upload?key=${CONFIG.imgbbApiKey}`, {
         method: "POST",
         body: form
       })
-      .then(r => r.text())
-      .then(text => {
-        if (text && text.startsWith("http")) resolve(text.trim());
+      .then(r => r.json())
+      .then(data => {
+        if (data && data.success) resolve(data.data.url);
         else reject(new Error("Upload failed"));
       })
       .catch(reject);
@@ -488,6 +488,19 @@ function openWhatsapp(msg){
 function sendWhatsapp(){
   if (!lastOrder) return;
   const o = lastOrder;
+
+  if (!CONFIG.imgbbApiKey){
+    getStickerCanvas().then(canvas => {
+      const dataUrl = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.download = "sticker-" + o.id + ".png";
+      a.href = dataUrl;
+      a.click();
+      const stickerLine = lang === "ar" ? "(مرفق ملصق الطلب في التنزيلات)" : "(order sticker attached in your downloads)";
+      setTimeout(() => openWhatsapp(buildOrderMessage(o, stickerLine)), 400);
+    });
+    return;
+  }
 
   getStickerCanvas().then(canvas => {
     uploadStickerToHost(canvas)
