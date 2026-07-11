@@ -225,6 +225,10 @@
         <input type="tel" id="cust-phone" data-ph="phonePh" placeholder="050 123 4567">
       </div>
       <div class="field">
+        <label data-t="addressLabel">Delivery address</label>
+        <textarea id="cust-address" data-ph="addressPh" placeholder="Building, street, area, city"></textarea>
+      </div>
+      <div class="field">
         <label data-t="notesLabel">Notes (optional)</label>
         <textarea id="cust-notes" data-ph="notesPh" placeholder="Delivery instructions, gift note..."></textarea>
       </div>
@@ -285,26 +289,28 @@ const I18N = {
     chooseProducts:"Choose your products", total:"Total",
     yourDetails:"Your details", nameLabel:"Full name", phoneLabel:"Phone number",
     notesLabel:"Notes (optional)", namePh:"Sara Al Mazrouei", phonePh:"050 123 4567",
+    addressLabel:"Delivery address", addressPh:"Building, street, area, city",
     notesPh:"Delivery instructions, gift note...",
-    formErr:"Add at least one product, your name and phone number.",
+    formErr:"Add at least one product, your name, phone number and address.",
     submitBtn:"Place order",
     confirmTitle:"Order received", confirmBody:"Your order is being prepared. Save or send the label below.",
     stickerFooter:"Handle with care · Thank you for your order",
     printBtn:"Print label", waBtn:"Send order on WhatsApp", newOrderBtn:"Start a new order",
-    stickerFor:"For", stickerPhone:"Phone", stickerNotes:"Notes"
+    stickerFor:"For", stickerPhone:"Phone", stickerNotes:"Notes", stickerAddress:"Address"
   },
   ar: {
     brand:"طابة الدخن", tagline:"دخن يُلَمّ بعناية",
     chooseProducts:"اختر منتجاتك", total:"الإجمالي",
     yourDetails:"بياناتك", nameLabel:"الاسم الكامل", phoneLabel:"رقم الهاتف",
     notesLabel:"ملاحظات (اختياري)", namePh:"سارة المزروعي", phonePh:"٠٥٠ ١٢٣ ٤٥٦٧",
+    addressLabel:"عنوان التوصيل", addressPh:"المبنى، الشارع، المنطقة، المدينة",
     notesPh:"تعليمات التوصيل، رسالة إهداء...",
-    formErr:"أضف منتجًا واحدًا على الأقل، مع الاسم ورقم الهاتف.",
+    formErr:"أضف منتجًا واحدًا على الأقل، مع الاسم ورقم الهاتف والعنوان.",
     submitBtn:"إرسال الطلب",
     confirmTitle:"تم استلام الطلب", confirmBody:"طلبك قيد التحضير الآن. احفظ الملصق أو أرسله أدناه.",
     stickerFooter:"يُرجى التعامل بحذر · شكرًا لطلبك",
     printBtn:"طباعة الملصق", waBtn:"إرسال الطلب عبر واتساب", newOrderBtn:"طلب جديد",
-    stickerFor:"إلى", stickerPhone:"الهاتف", stickerNotes:"ملاحظات"
+    stickerFor:"إلى", stickerPhone:"الهاتف", stickerNotes:"ملاحظات", stickerAddress:"العنوان"
   }
 };
 
@@ -376,12 +382,13 @@ function setLang(l){
 function submitOrder(){
   const name = document.getElementById("cust-name").value.trim();
   const phone = document.getElementById("cust-phone").value.trim();
+  const address = document.getElementById("cust-address").value.trim();
   const notes = document.getElementById("cust-notes").value.trim();
   const total = updateTotal();
   const items = CONFIG.products.filter(p => qty[p.id] > 0);
 
   const errEl = document.getElementById("form-err");
-  if (!name || !phone || items.length === 0){
+  if (!name || !phone || !address || items.length === 0){
     errEl.classList.remove("hidden");
     return;
   }
@@ -389,7 +396,7 @@ function submitOrder(){
 
   lastOrder = {
     id: "TD-" + Date.now().toString().slice(-6),
-    name, phone, notes, items, total
+    name, phone, address, notes, items, total
   };
 
   document.getElementById("order-view").classList.add("hidden");
@@ -415,6 +422,10 @@ function renderSticker(order){
   phoneLine.className = "s-row";
   phoneLine.innerHTML = `<span>${I18N[lang].stickerPhone}</span><span>${order.phone}</span>`;
   linesEl.insertBefore(phoneLine, linesEl.children[1]);
+  const addressLine = document.createElement("div");
+  addressLine.className = "s-row";
+  addressLine.innerHTML = `<span>${I18N[lang].stickerAddress}</span><span>${order.address}</span>`;
+  linesEl.insertBefore(addressLine, linesEl.children[2]);
 
   document.getElementById("s-total").textContent = fmtMoney(order.total);
   document.getElementById("s-note").textContent = order.notes
@@ -427,8 +438,8 @@ function sendWhatsapp(){
   const o = lastOrder;
   const lines = o.items.map(p => `${qty[p.id]} x ${lang==='ar' ? p.ar : p.en} - ${fmtMoney(p.price*qty[p.id])}`).join("\n");
   const msg = lang === "ar"
-    ? `طلب جديد #${o.id}\nالاسم: ${o.name}\nالهاتف: ${o.phone}\n${lines}\nالإجمالي: ${fmtMoney(o.total)}${o.notes ? "\nملاحظات: "+o.notes : ""}`
-    : `New order #${o.id}\nName: ${o.name}\nPhone: ${o.phone}\n${lines}\nTotal: ${fmtMoney(o.total)}${o.notes ? "\nNotes: "+o.notes : ""}`;
+    ? `طلب جديد #${o.id}\nالاسم: ${o.name}\nالهاتف: ${o.phone}\nالعنوان: ${o.address}\n${lines}\nالإجمالي: ${fmtMoney(o.total)}${o.notes ? "\nملاحظات: "+o.notes : ""}`
+    : `New order #${o.id}\nName: ${o.name}\nPhone: ${o.phone}\nAddress: ${o.address}\n${lines}\nTotal: ${fmtMoney(o.total)}${o.notes ? "\nNotes: "+o.notes : ""}`;
   const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(msg)}`;
   window.open(url, "_blank");
 }
@@ -437,6 +448,7 @@ function newOrder(){
   CONFIG.products.forEach(p => qty[p.id] = 0);
   document.getElementById("cust-name").value = "";
   document.getElementById("cust-phone").value = "";
+  document.getElementById("cust-address").value = "";
   document.getElementById("cust-notes").value = "";
   lastOrder = null;
   document.getElementById("confirm-view").classList.add("hidden");
