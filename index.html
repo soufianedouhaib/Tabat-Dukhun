@@ -263,7 +263,9 @@
 
       <div class="actions">
         <button class="btn btn-secondary" onclick="window.print()" data-t="printBtn">Print label</button>
+        <button class="btn btn-secondary" onclick="downloadSticker()" data-t="downloadBtn">Download sticker image</button>
         <button class="btn btn-whatsapp" onclick="sendWhatsapp()" data-t="waBtn">Send order on WhatsApp</button>
+        <p class="err" id="wa-hint" style="color:var(--ink-soft); text-align:center; font-size:.78rem; margin-top:.4rem;" data-t="waHint">Downloads the sticker first — attach it in the WhatsApp chat that opens.</p>
         <button class="btn btn-secondary" onclick="newOrder()" data-t="newOrderBtn">Start a new order</button>
       </div>
     </div>
@@ -271,10 +273,11 @@
 
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 const CONFIG = {
   currency: "AED",
-  whatsappNumber: "971569048608",
+  whatsappNumber: "971500000000",
   products: [
     { id:"p1", en:"Dukhun flour, 1kg", ar:"دقيق الدخن، ١ كجم", price:22 },
     { id:"p2", en:"Roasted dukhun bites", ar:"حبات الدخن المحمّصة", price:15 },
@@ -295,7 +298,8 @@ const I18N = {
     submitBtn:"Place order",
     confirmTitle:"Order received", confirmBody:"Your order is being prepared. Save or send the label below.",
     stickerFooter:"Handle with care · Thank you for your order",
-    printBtn:"Print label", waBtn:"Send order on WhatsApp", newOrderBtn:"Start a new order",
+    printBtn:"Print label", downloadBtn:"Download sticker image", waBtn:"Send order on WhatsApp", newOrderBtn:"Start a new order",
+    waHint:"Downloads the sticker first — attach it in the WhatsApp chat that opens.",
     stickerFor:"For", stickerPhone:"Phone", stickerNotes:"Notes", stickerAddress:"Address"
   },
   ar: {
@@ -309,7 +313,8 @@ const I18N = {
     submitBtn:"إرسال الطلب",
     confirmTitle:"تم استلام الطلب", confirmBody:"طلبك قيد التحضير الآن. احفظ الملصق أو أرسله أدناه.",
     stickerFooter:"يُرجى التعامل بحذر · شكرًا لطلبك",
-    printBtn:"طباعة الملصق", waBtn:"إرسال الطلب عبر واتساب", newOrderBtn:"طلب جديد",
+    printBtn:"طباعة الملصق", downloadBtn:"تنزيل صورة الملصق", waBtn:"إرسال الطلب عبر واتساب", newOrderBtn:"طلب جديد",
+    waHint:"سيتم تنزيل الملصق أولاً — أرفقه في محادثة واتساب التي ستُفتح.",
     stickerFor:"إلى", stickerPhone:"الهاتف", stickerNotes:"ملاحظات", stickerAddress:"العنوان"
   }
 };
@@ -433,15 +438,73 @@ function renderSticker(order){
     : "";
 }
 
+function getStickerCanvas(){
+  const el = document.getElementById("sticker");
+  return html2canvas(el, { scale: 3, backgroundColor: "#ffffff" });
+}
+
+function downloadSticker(){
+  if (!lastOrder) return;
+  getStickerCanvas().then(canvas => {
+    const link = document.createElement("a");
+    link.download = "sticker-" + lastOrder.id + ".png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  });
+}
+
+function uploadStickerToHost(canvas){
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(blob => {
+      const form = new FormData();
+      form.append("reqtype", "fileupload");
+      form.append("fileToUpload", blob, "sticker.png");
+      fetch("https://catbox.moe/user/api.php", {
+        method: "POST",
+        body: form
+      })
+      .then(r => r.text())
+      .then(text => {
+        if (text && text.startsWith("http")) resolve(text.trim());
+        else reject(new Error("Upload failed"));
+      })
+      .catch(reject);
+    }, "image/png");
+  });
+}
+
+function buildOrderMessage(o, stickerLine){
+  const lines = o.items.map(p => `${qty[p.id]} x ${lang==='ar' ? p.ar : p.en} - ${fmtMoney(p.price*qty[p.id])}`).join("\n");
+  return lang === "ar"
+    ? `طلب جديد #${o.id}\nالاسم: ${o.name}\nالهاتف: ${o.phone}\nالعنوان: ${o.address}\n${lines}\nالإجمالي: ${fmtMoney(o.total)}${o.notes ? "\nملاحظات: "+o.notes : ""}\n${stickerLine}`
+    : `New order #${o.id}\nName: ${o.name}\nPhone: ${o.phone}\nAddress: ${o.address}\n${lines}\nTotal: ${fmtMoney(o.total)}${o.notes ? "\nNotes: "+o.notes : ""}\n${stickerLine}`;
+}
+
+function openWhatsapp(msg){
+  const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(msg)}`;
+  window.open(url, "_blank");
+}
+
 function sendWhatsapp(){
   if (!lastOrder) return;
   const o = lastOrder;
-  const lines = o.items.map(p => `${qty[p.id]} x ${lang==='ar' ? p.ar : p.en} - ${fmtMoney(p.price*qty[p.id])}`).join("\n");
-  const msg = lang === "ar"
-    ? `طلب جديد #${o.id}\nالاسم: ${o.name}\nالهاتف: ${o.phone}\nالعنوان: ${o.address}\n${lines}\nالإجمالي: ${fmtMoney(o.total)}${o.notes ? "\nملاحظات: "+o.notes : ""}`
-    : `New order #${o.id}\nName: ${o.name}\nPhone: ${o.phone}\nAddress: ${o.address}\n${lines}\nTotal: ${fmtMoney(o.total)}${o.notes ? "\nNotes: "+o.notes : ""}`;
-  const url = `https://wa.me/${CONFIG.whatsappNumber}?text=${encodeURIComponent(msg)}`;
-  window.open(url, "_blank");
+
+  getStickerCanvas().then(canvas => {
+    uploadStickerToHost(canvas)
+      .then(link => {
+        const stickerLine = lang === "ar" ? `ملصق الطلب: ${link}` : `Order sticker: ${link}`;
+        openWhatsapp(buildOrderMessage(o, stickerLine));
+      })
+      .catch(() => {
+        const dataUrl = canvas.toDataURL("image/png");
+        const a = document.createElement("a");
+        a.download = "sticker-" + o.id + ".png";
+        a.href = dataUrl;
+        a.click();
+        const stickerLine = lang === "ar" ? "(تعذر رفع الملصق تلقائيًا، تم تنزيله - يرجى إرفاقه يدويًا)" : "(sticker upload failed, downloaded instead - please attach it manually)";
+        setTimeout(() => openWhatsapp(buildOrderMessage(o, stickerLine)), 400);
+      });
+  });
 }
 
 function newOrder(){
